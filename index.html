@@ -1,0 +1,179 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>FancyClima</title>
+
+<style>
+  body {
+    margin: 0;
+    font-family: "Segoe UI", Arial, sans-serif;
+    background: linear-gradient(135deg, #0d1f00 0%, #6dcc00 100%);
+    color: white;
+    overflow: hidden;
+  }
+
+  /* =======================
+     LANDING SCREEN
+  ======================= */
+  #landing {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    text-align: center;
+    background: linear-gradient(135deg, #0a2a00 0%, #20da67 70%, #ccfcde 100%);
+
+  }
+
+  .title {
+    font-size: 42px;
+    font-weight: 700;
+    letter-spacing: 1px;
+    margin-bottom: 10px;
+  }
+
+  .subtitle {
+    font-size: 16px;
+    opacity: 0.8;
+    margin-bottom: 40px;
+    max-width: 600px;
+  }
+
+  .start-btn {
+    padding: 14px 28px;
+    font-size: 16px;
+    border: none;
+    border-radius: 12px;
+    cursor: pointer;
+    background: linear-gradient(135deg, #4c7dff, #00d4ff);
+    color: white;
+    font-weight: 600;
+    box-shadow: 0 10px 30px rgba(0,0,0,0.4);
+    transition: 0.25s ease;
+  }
+
+  .start-btn:hover {
+    transform: scale(1.05);
+  }
+
+  /* =======================
+     APP LAYOUT
+  ======================= */
+  #app {
+    display: none;
+    height: 100vh;
+    flex-direction: column;
+  }
+
+  header {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 14px;
+    background: rgba(10, 16, 35, 0.9);
+    border-bottom: 1px solid rgba(255,255,255,0.1);
+  }
+
+  .brand {
+    font-weight: 700;
+    margin-right: 20px;
+    color: #9ec1ff;
+  }
+
+  .tab {
+    padding: 8px 12px;
+    border-radius: 10px;
+    cursor: pointer;
+    background: rgba(255,255,255,0.06);
+    transition: 0.2s;
+    font-size: 14px;
+  }
+
+  .tab:hover {
+    background: rgba(255,255,255,0.15);
+  }
+
+  .tab.active {
+    background: linear-gradient(135deg, #4c7dff, #00d4ff);
+  }
+
+  iframe {
+    flex: 1;
+    width: 100%;
+    border: none;
+    background: #050713;
+  }
+
+  .spacer {
+    flex: 1;
+  }
+</style>
+</head>
+
+<body>
+
+<!-- =======================
+     LANDING PAGE
+======================= -->
+<div id="landing">
+  <div class="title">🌍 Welcome to the FancyClima</div>
+  <div class="subtitle">
+    Explore Europe’s climate (1995-2025) through fancy innovative charts.
+  </div>
+
+  <button class="start-btn" onclick="startApp()">
+    🚀 Let’s Start
+  </button>
+</div>
+
+<!-- =======================
+     APP
+======================= -->
+<div id="app">
+
+  <header>
+    <div class="brand">FancyClima</div>
+
+    <div class="tab active" onclick="loadPage('climate_garden.html', this)">
+      Climate Garden
+    </div>
+
+
+    <div class="tab" onclick="loadPage('climate_ocean.html', this)">
+      Ocean Mean
+    </div>
+
+
+    <div class="tab" onclick="loadPage('climate_galaxies.html', this)">
+      Galaxies
+    </div>
+
+    <div class="tab" onclick="loadPage('climate_stars.html', this)">
+      Stars Trend
+    </div>
+
+    <div class="spacer"></div>
+  </header>
+
+  <iframe id="view" src="climate_garden.html"></iframe>
+</div>
+
+<script>
+function startApp() {
+  document.getElementById("landing").style.display = "none";
+  document.getElementById("app").style.display = "flex";
+}
+
+function loadPage(page, el) {
+  document.getElementById("view").src = page;
+
+  document.querySelectorAll(".tab").forEach(t => t.classList.remove("active"));
+  el.classList.add("active");
+}
+</script>
+
+</body>
+</html>

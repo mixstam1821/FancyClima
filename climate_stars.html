@@ -1,0 +1,410 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Climate Trend Stars — ERA5 Mediterranean</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+html,body{width:100%;height:100%;background:#03030d}
+body{display:flex;flex-direction:column;align-items:center;font-family:'Comic Sans MS','Chalkboard SE','Comic Sans',cursive;overflow-x:hidden}
+canvas{display:block;width:100%;cursor:crosshair}
+
+#tip{
+  position:fixed;pointer-events:none;
+  background:rgba(2,3,14,0.97);
+  border:0.5px solid rgba(140,180,255,0.18);
+  border-radius:10px;padding:13px 17px;
+  font-size:14px;color:#8899bb;display:none;z-index:99;
+  max-width:260px;line-height:1.9;
+  box-shadow:0 0 24px rgba(60,100,200,0.15);
+  font-family:'Comic Sans MS','Chalkboard SE','Comic Sans',cursive;
+}
+#tip .tn{font-size:16px;font-weight:700;color:#dde4f5;margin-bottom:5px}
+#tip .tv{font-size:13px;color:#556}
+
+.bar{
+  display:flex;gap:12px;align-items:center;padding:10px 0 6px;
+  flex-wrap:wrap;justify-content:center;
+  background:#03030d;width:100%;
+}
+button{
+  background:rgba(255,255,255,0.04);
+  border:0.5px solid rgba(255,255,255,0.09);
+  color:#556;padding:6px 22px;border-radius:6px;
+  cursor:pointer;font-size:14px;
+  font-family:'Comic Sans MS','Chalkboard SE','Comic Sans',cursive;
+  transition:all 0.2s;
+}
+button:hover{background:rgba(255,255,255,0.08);color:#889;border-color:rgba(255,255,255,0.15)}
+
+.meta{
+  font-size:19px;color:rgb(255, 220, 104);letter-spacing:0.08em;text-transform:uppercase;
+  padding:4px 0 8px;
+  font-family:'Comic Sans MS','Chalkboard SE','Comic Sans',cursive;
+}
+
+.leg{
+  display:flex;flex-direction:column;align-items:center;gap:6px;
+  padding-bottom:14px;background:#03030d;width:100%;
+}
+.li{
+  display:flex;gap:0;font-size:13px;
+  border:0.5px solid rgba(255,255,255,0.06);
+  border-radius:7px;overflow:hidden;
+}
+.lc{padding:6px 14px;display:flex;align-items:center;gap:9px;color:#334;
+  font-family:'Comic Sans MS','Chalkboard SE','Comic Sans',cursive;}
+.lb{width:40px;height:7px;border-radius:2px;flex-shrink:0}
+
+#sig-bar{
+  display:flex;gap:7px;align-items:center;font-size:12px;color:#2a3550;
+  font-family:'Comic Sans MS','Chalkboard SE','Comic Sans',cursive;padding:2px 0 4px;
+}
+.sig-dot{width:8px;height:8px;border-radius:50%;display:inline-block}
+</style>
+</head>
+<body>
+  <div class="meta">ERA5 · Europe · 1995 - 2025 · trend per decade</div>
+
+<canvas id="c"></canvas>
+
+<div class="bar">
+  <button id="rst">↺ Restart</button>
+</div>
+<div class="leg">
+  <div class="li">
+    <div class="lc">
+      <div class="lb" style="background:linear-gradient(to right,#00007f,#0000ff,#00ffff,#ffff00,#ff7f00,#ff0000,#7f0000)"></div>
+      decreasing ← neutral → increasing · size ∝ |%/decade|
+    </div>
+  </div>
+  <div id="sig-bar">
+    <span class="sig-dot" style="background:#dde4f5;opacity:0.9"></span>solid ring = p &lt; 0.01 &nbsp;·&nbsp;
+    <span class="sig-dot" style="background:#dde4f5;opacity:0.35"></span>dashed ring = p &lt; 0.05 &nbsp;·&nbsp;
+    <span class="sig-dot" style="background:#223;border:0.5px solid #334"></span>no ring = not significant
+  </div>
+</div>
+<div id="tip"></div>
+
+<script>
+const VARS = [
+  { name:'Surface Temperature',      unit:'°C',      mean:11.751,      trend:+0.4252,   pct:+3.619, r2:0.819, p:2.78e-12 },
+  { name:'Atmospheric Water Vapour', unit:'kg m⁻²',  mean:15.568,      trend:+0.4268,   pct:+2.741, r2:0.698, p:4.99e-9  },
+  { name:'Column Ozone',             unit:'kg m⁻²',  mean:0.00693,     trend:+9.22e-5,  pct:+1.330, r2:0.354, p:4.17e-4  },
+  { name:'Total Cloud Cover',        unit:'fraction', mean:0.5886,      trend:-0.004621, pct:-0.785, r2:0.309, p:1.18e-3  },
+  { name:'Precipitation',            unit:'mm/day',   mean:2.043,       trend:+0.009781, pct:+0.479, r2:0.057, p:0.1944   },
+  { name:'Snow Density',             unit:'kg m⁻³',  mean:111.06,      trend:-0.4835,   pct:-0.435, r2:0.238, p:5.36e-3  },
+  { name:'Solar Radiation',          unit:'J m⁻²',   mean:17391793,    trend:+68147,    pct:+0.392, r2:0.569, p:9.59e-7  },
+  { name:'Thermal Radiation',        unit:'J m⁻²',   mean:-20501090,   trend:-64689,    pct:+0.316, r2:0.514, p:5.68e-6  },
+  { name:'Wind Speed',               unit:'m s⁻¹',   mean:5.385,       trend:+0.002320, pct:+0.043, r2:0.002, p:0.8234   },
+  { name:'Evaporation',              unit:'m w.e.',   mean:-0.001983,   trend:-7.23e-7,  pct:+0.036, r2:4.3e-4,p:0.9121   },
+];
+
+VARS.forEach(v => {
+  v.sigTier = v.p < 0.01 ? 2 : v.p < 0.05 ? 1 : 0;
+  const abs = Math.abs(v.trend);
+  if      (abs >= 1000)  v.trendStr = (v.trend/1000).toFixed(2)+'k '+v.unit+'/dec';
+  else if (abs >= 1)     v.trendStr = v.trend.toFixed(4)+' '+v.unit+'/dec';
+  else if (abs >= 0.001) v.trendStr = v.trend.toFixed(5)+' '+v.unit+'/dec';
+  else                   v.trendStr = v.trend.toExponential(3)+' '+v.unit+'/dec';
+});
+
+const maxAbsPct = Math.max(...VARS.map(v => Math.abs(v.pct)));
+VARS.forEach(v => { v.jt = 0.5 + 0.5 * (v.pct / maxAbsPct); });
+
+// Canvas: full viewport width, tall aspect
+const canvas = document.getElementById('c');
+const ctx    = canvas.getContext('2d');
+const tip    = document.getElementById('tip');
+const DPR    = Math.min(window.devicePixelRatio || 1, 2);
+const W      = window.innerWidth;
+const H      = Math.round(W * 0.5);   
+canvas.style.width  = W + 'px';
+canvas.style.height = H + 'px';
+canvas.width  = W * DPR;
+canvas.height = H * DPR;
+ctx.scale(DPR, DPR);
+
+function jet(t) {
+  t = 0.15 + Math.max(0, Math.min(1, t)) * 0.70;  // remap 0→1 into 0.15→0.85
+  let r,g,b;
+  if      (t<0.125){r=0;  g=0;  b=128+127*(t/0.125);}
+  else if (t<0.375){r=0;  g=255*(t-0.125)/0.25;b=255;}
+  else if (t<0.625){r=255*(t-0.375)/0.25;g=255;b=255-255*(t-0.375)/0.25;}
+  else if (t<0.875){r=255;g=255-255*(t-0.625)/0.25;b=0;}
+  else             {r=255-127*(t-0.875)/0.125;g=0;b=0;}
+  return [r|0,g|0,b|0];
+}
+function jetRgba(t,a){const[r,g,b]=jet(t);return`rgba(${r},${g},${b},${a})`;}
+
+// Larger stars with bigger canvas
+const MIN_R=6, MAX_R=58, POWER=1.8;
+function starSize(i){
+  const norm  = Math.abs(VARS[i].pct)/maxAbsPct;
+  const scaled = Math.pow(norm, 1/POWER);
+  return MIN_R + scaled*(MAX_R-MIN_R);
+}
+
+function rng(s){s=(s^s<<13)>>>0;s=(s^s>>7)>>>0;s=(s^s<<17)>>>0;return s/4294967296;}
+
+// Non-overlapping positions — wider minimum gap for the bigger canvas
+const starPos=[];
+const PAD=140, MIN_SEP=155;
+for(let i=0;i<VARS.length;i++){
+  let x,y,ok,att=0;
+  do{
+    x=PAD+rng(i*79+1)*(W-PAD*2);
+    y=PAD+rng(i*79+2)*(H-PAD*2);
+    ok=true;
+    for(let j=0;j<starPos.length;j++){
+      if(Math.hypot(x-starPos[j].x,y-starPos[j].y)<MIN_SEP){ok=false;break;}
+    }
+    if(!ok){x=PAD+rng(i*79+att*17+3)*(W-PAD*2);y=PAD+rng(i*79+att*17+4)*(H-PAD*2);}
+    att++;
+  }while(!ok&&att<400);
+  starPos.push({x,y});
+}
+
+function entryPoint(i){
+  const side=i%4;
+  if(side===0)return{sx:rng(i*31+5)*W,sy:-50};
+  if(side===1)return{sx:W+50,sy:rng(i*31+6)*H};
+  if(side===2)return{sx:rng(i*31+7)*W,sy:H+50};
+  return{sx:-50,sy:rng(i*31+8)*H};
+}
+
+const COMET_DUR=2.2,SETTLE_DUR=0.7,HOLD_DUR=0.5;
+const SLOT=COMET_DUR+SETTLE_DUR+HOLD_DUR;
+
+const comets=VARS.map((v,i)=>{
+  const{sx,sy}=entryPoint(i);
+  return{i,v,sx,sy,ex:starPos[i].x,ey:starPos[i].y,jt:v.jt,
+    startT:i*SLOT,phase:'wait',starScale:0,settleStart:null,haloPhase:0};
+});
+
+const bgStars=Array.from({length:320},(_,i)=>({
+  x:rng(i*13+5)*W, y:rng(i*13+6)*H,
+  r:0.2+rng(i*13+7)*1.1, a:0.10+rng(i*13+8)*0.42,
+  tw:rng(i*13+9)*Math.PI*2, ts:0.25+rng(i*13+10)*1.1,
+  hue:rng(i*13+11)>0.8?'200,220,255':'210,215,240',
+}));
+
+const tailHistories=VARS.map(()=>[]);
+const TAIL_LEN=90;
+let elapsed=0,running=true,last=null,hovered=-1;
+const TOTAL_DUR=VARS.length*SLOT+2.0;
+
+function easeInOut(t){return t<0.5?2*t*t:1-2*(1-t)*(1-t);}
+function easeOutElastic(t){
+  if(t<=0)return 0;if(t>=1)return 1;
+  return Math.pow(2,-10*t)*Math.sin((t*10-0.75)*(2*Math.PI)/3)+1;
+}
+
+canvas.addEventListener('mousemove',e=>{
+  const rect=canvas.getBoundingClientRect();
+  const mx=e.clientX-rect.left,my=e.clientY-rect.top;
+  let best=-1,bestD=70;
+  comets.forEach((c,i)=>{
+    if(c.phase!=='done'&&c.phase!=='settle')return;
+    const d=Math.hypot(mx-c.ex,my-c.ey);
+    if(d<Math.max(starSize(i)+28,bestD)){bestD=d;best=i;}
+  });
+  hovered=best;
+  if(best>=0){
+    const v=comets[best].v;
+    const sign=v.pct>=0?'+':'';
+    const pStr=sign+v.pct.toFixed(2)+'%/decade';
+    const sigLabel=v.sigTier===2?'★★ p < 0.01':v.sigTier===1?'★ p < 0.05':'— not significant';
+    tip.innerHTML=`<div class="tn">${v.name}</div>
+      <div>Trend: <b style="color:${jetRgba(v.jt,1)}">${v.trendStr}</b></div>
+      <div>vs mean: <b style="color:${jetRgba(v.jt,1)}">${pStr}</b></div>
+      <div class="tv">baseline ≈ ${Math.abs(v.mean)<0.01?v.mean.toExponential(3):v.mean.toFixed(3)} ${v.unit}</div>`;
+    tip.style.display='block';
+    tip.style.left=(e.clientX+20)+'px';
+    tip.style.top=Math.max(10,e.clientY-10)+'px';
+  }else tip.style.display='none';
+});
+canvas.addEventListener('mouseleave',()=>{hovered=-1;tip.style.display='none';});
+
+function drawSettledStar(c,ts,isHov){
+  const cx=c.ex,cy=c.ey;
+  const sz=starSize(c.i);
+  const pulse=isHov?1:0.93+0.07*Math.sin(ts*1.35+c.i*1.4);
+  const rr=sz*c.starScale*pulse*(isHov?1.13:1);
+  const[r,g,b]=jet(c.jt);
+  c.haloPhase=(c.haloPhase||0)+0.013;
+
+  for(let ring=0;ring<5;ring++){
+    const phase=c.haloPhase+ring*Math.PI*0.4;
+    const breathe=1+0.13*Math.sin(phase*(0.6+ring*0.12));
+    const baseR=rr*(2.5+ring*2.3)*breathe;
+    const alpha=(0.21-ring*0.03)*c.starScale;
+    const gr=ctx.createRadialGradient(cx,cy,rr*0.3,cx,cy,baseR);
+    gr.addColorStop(0,`rgba(${r},${g},${b},${alpha})`);
+    gr.addColorStop(0.45,`rgba(${r},${g},${b},${alpha*0.25})`);
+    gr.addColorStop(1,'rgba(0,0,0,0)');
+    ctx.fillStyle=gr;ctx.beginPath();ctx.arc(cx,cy,baseR,0,Math.PI*2);ctx.fill();
+  }
+
+  const bloom=ctx.createRadialGradient(cx,cy,0,cx,cy,rr*10);
+  bloom.addColorStop(0,`rgba(${r},${g},${b},${0.065*c.starScale})`);
+  bloom.addColorStop(0.4,`rgba(${r},${g},${b},${0.018*c.starScale})`);
+  bloom.addColorStop(1,'rgba(0,0,0,0)');
+  ctx.fillStyle=bloom;ctx.beginPath();ctx.arc(cx,cy,rr*10,0,Math.PI*2);ctx.fill();
+
+  const v=c.v;
+  if(v.sigTier>0){
+    ctx.save();
+    const ringR=rr*2.6;
+    const alpha=v.sigTier===2?0.55:0.28;
+    const ringW=v.sigTier===2?1.1:0.7;
+    ctx.beginPath();ctx.arc(cx,cy,ringR,0,Math.PI*2);
+    if(v.sigTier===1){ctx.setLineDash([4,5]);ctx.lineDashOffset=-c.haloPhase*18;}
+    else ctx.setLineDash([]);
+    ctx.strokeStyle=`rgba(${r},${g},${b},${alpha*c.starScale})`;
+    ctx.lineWidth=ringW;ctx.stroke();ctx.setLineDash([]);ctx.restore();
+  }
+
+  const spikeLen=rr*(isHov?5.8:4.4);
+  const rot=c.haloPhase*0.065;
+  for(let s=0;s<4;s++){
+    const ang=s*Math.PI/2+rot;
+    const sw=1.5+(rr/MAX_R)*2.5;
+    const gr=ctx.createLinearGradient(
+      cx-Math.cos(ang)*spikeLen,cy-Math.sin(ang)*spikeLen,
+      cx+Math.cos(ang)*spikeLen,cy+Math.sin(ang)*spikeLen);
+    gr.addColorStop(0,`rgba(${r},${g},${b},0)`);
+    gr.addColorStop(0.35,`rgba(${r},${g},${b},${0.07*c.starScale})`);
+    gr.addColorStop(0.5,`rgba(${r},${g},${b},${0.78*c.starScale})`);
+    gr.addColorStop(0.65,`rgba(${r},${g},${b},${0.07*c.starScale})`);
+    gr.addColorStop(1,`rgba(${r},${g},${b},0)`);
+    ctx.beginPath();
+    ctx.moveTo(cx-Math.cos(ang)*spikeLen,cy-Math.sin(ang)*spikeLen);
+    ctx.lineTo(cx+Math.cos(ang)*spikeLen,cy+Math.sin(ang)*spikeLen);
+    ctx.strokeStyle=gr;ctx.lineWidth=isHov?sw+1:sw;ctx.lineCap='round';ctx.stroke();
+  }
+  for(let s=0;s<4;s++){
+    const ang=s*Math.PI/2+Math.PI/4+rot;
+    const slen=spikeLen*0.52;
+    const gr=ctx.createLinearGradient(
+      cx-Math.cos(ang)*slen,cy-Math.sin(ang)*slen,
+      cx+Math.cos(ang)*slen,cy+Math.sin(ang)*slen);
+    gr.addColorStop(0,`rgba(${r},${g},${b},0)`);
+    gr.addColorStop(0.5,`rgba(${r},${g},${b},${0.28*c.starScale})`);
+    gr.addColorStop(1,`rgba(${r},${g},${b},0)`);
+    ctx.beginPath();
+    ctx.moveTo(cx-Math.cos(ang)*slen,cy-Math.sin(ang)*slen);
+    ctx.lineTo(cx+Math.cos(ang)*slen,cy+Math.sin(ang)*slen);
+    ctx.strokeStyle=gr;ctx.lineWidth=0.9;ctx.stroke();
+  }
+
+  const core=ctx.createRadialGradient(cx,cy,0,cx,cy,rr);
+  core.addColorStop(0,'rgba(255,255,255,0.99)');
+  core.addColorStop(0.18,`rgba(${Math.min(255,r+110)},${Math.min(255,g+110)},${Math.min(255,b+110)},0.96)`);
+  core.addColorStop(0.62,`rgba(${r},${g},${b},0.88)`);
+  core.addColorStop(1,`rgba(${r},${g},${b},0.3)`);
+  ctx.beginPath();ctx.arc(cx,cy,rr,0,Math.PI*2);ctx.fillStyle=core;ctx.fill();
+  ctx.beginPath();ctx.arc(cx,cy,Math.max(1.8,rr*0.26),0,Math.PI*2);
+  ctx.fillStyle='rgba(255,255,255,0.97)';ctx.fill();
+}
+
+function render(ts){
+  const t=ts/1000;
+  ctx.fillStyle='#03030d';ctx.fillRect(0,0,W,H);
+
+  [[W*0.16,H*0.22,'35,15,75'],[W*0.70,H*0.16,'15,35,65'],
+   [W*0.82,H*0.78,'45,20,55'],[W*0.35,H*0.72,'20,30,60'],
+   [W*0.55,H*0.48,'25,20,65']].forEach(([gx,gy,col])=>{
+    const g=ctx.createRadialGradient(gx,gy,0,gx,gy,250);
+    g.addColorStop(0,`rgba(${col},0.10)`);g.addColorStop(1,'rgba(0,0,0,0)');
+    ctx.fillStyle=g;ctx.fillRect(0,0,W,H);
+  });
+
+  bgStars.forEach(s=>{
+    const a=s.a*(0.60+0.40*Math.sin(t*s.ts+s.tw));
+    ctx.beginPath();ctx.arc(s.x,s.y,s.r,0,Math.PI*2);
+    ctx.fillStyle=`rgba(${s.hue},${a})`;ctx.fill();
+  });
+
+  comets.forEach((c,i)=>{
+    const age=elapsed-c.startT;
+    if(age<0)return;
+    if(c.phase==='wait')c.phase='fly';
+
+    if(c.phase==='fly'){
+      const p=Math.min(age/COMET_DUR,1);
+      const ep=easeInOut(p);
+      const cx=c.sx+(c.ex-c.sx)*ep;
+      const cy=c.sy+(c.ey-c.sy)*ep;
+
+      tailHistories[i].push({x:cx,y:cy});
+      if(tailHistories[i].length>TAIL_LEN)tailHistories[i].shift();
+
+      const hist=tailHistories[i];
+      if(hist.length>2){
+        for(let k=hist.length-1;k>0;k--){
+          const frac=(hist.length-1-k)/(hist.length-1);
+          const segAlpha=(1-frac)*(1-frac)*0.90;
+          const segWidth=1.5+(1-frac)*(1-frac)*22;
+          const tailJt=Math.max(0,Math.min(1,c.jt-frac*0.06));
+          ctx.beginPath();ctx.moveTo(hist[k].x,hist[k].y);ctx.lineTo(hist[k-1].x,hist[k-1].y);
+          ctx.strokeStyle=jetRgba(tailJt,segAlpha);ctx.lineWidth=segWidth;ctx.lineCap='round';ctx.stroke();
+        }
+      }
+      for(let layer=3;layer>=1;layer--){
+        const gr=ctx.createRadialGradient(cx,cy,0,cx,cy,12+layer*12);
+        gr.addColorStop(0,jetRgba(c.jt,0.65/layer));
+        gr.addColorStop(1,'rgba(0,0,0,0)');
+        ctx.fillStyle=gr;ctx.beginPath();ctx.arc(cx,cy,12+layer*12,0,Math.PI*2);ctx.fill();
+      }
+      ctx.beginPath();ctx.arc(cx,cy,5.5,0,Math.PI*2);
+      ctx.fillStyle='rgba(255,255,255,0.99)';ctx.fill();
+      if(p>=1){c.phase='settle';c.settleStart=elapsed;tailHistories[i]=[];}
+    }
+
+    if(c.phase==='settle'||c.phase==='done'){
+      const settleAge=elapsed-(c.settleStart||elapsed);
+      const sp=Math.min(settleAge/SETTLE_DUR,1);
+      c.starScale=easeOutElastic(sp);
+      if(sp>=1)c.phase='done';
+      drawSettledStar(c,t,hovered===i);
+
+      const labelAlpha=Math.max(0,Math.min(1,(settleAge-SETTLE_DUR*0.4)*2.8));
+      if(labelAlpha>0){
+        const sz=starSize(i);
+        const pctStr=(c.v.pct>=0?'+':'')+c.v.pct.toFixed(2)+'%';
+        const[r,g,b]=jet(c.jt);
+        ctx.textAlign='center';
+        // variable name
+        ctx.font=`400 14px 'Comic Sans MS','Chalkboard SE',cursive`;
+        ctx.fillStyle=`rgba(150,170,210,${0.70*labelAlpha})`;
+        ctx.fillText(c.v.name,c.ex,c.ey+sz+22);
+        // pct value
+        ctx.font=`700 17px 'Comic Sans MS','Chalkboard SE',cursive`;
+        ctx.fillStyle=`rgba(${r},${g},${b},${labelAlpha})`;
+        ctx.fillText(pctStr+'/dec',c.ex,c.ey+sz+42);
+      }
+    }
+  });
+}
+
+function tick(ts){
+  requestAnimationFrame(tick);
+  if(!running){last=null;return;}
+  if(!last)last=ts;
+  const dt=(ts-last)/1000;last=ts;
+  elapsed = Math.min(elapsed+dt, TOTAL_DUR);
+  render(ts);
+}
+
+requestAnimationFrame(ts=>{render(ts);requestAnimationFrame(tick);});
+
+document.getElementById('rst').onclick=function(){
+  elapsed=0;running=true;last=null;
+  comets.forEach(c=>{c.phase='wait';c.starScale=0;c.settleStart=null;c.haloPhase=0;});
+  tailHistories.forEach((_,i)=>{tailHistories[i]=[];});
+};
+</script>
+</body>
+</html>

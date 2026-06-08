@@ -1,0 +1,408 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="UTF-8">
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:#03030a;display:flex;flex-direction:column;align-items:center;font-family:'Comic Sans MS','Comic Sans',cursive;padding:0 0 16px}
+.header{width:100%;padding:14px 18px 10px;border-bottom:0.5px solid rgba(255,255,255,0.06);margin-bottom:4px}
+.header-top{display:flex;align-items:baseline;gap:12px;flex-wrap:wrap}
+.header-title{font-size:22px;font-weight:700;color:#e8e0c8;letter-spacing:.01em}
+.header-sub{font-size:18px;color:#ff9f05;letter-spacing:.04em}
+.header-desc{margin-top:7px;font-size:13px;color:#6a6560;line-height:1.6;max-width:1640px}
+.header-desc b{color:#9a8870;font-weight:700}
+.legend{display:flex;gap:16px;margin-top:10px;flex-wrap:wrap;align-items:flex-start}
+.leg-block{display:flex;flex-direction:column;gap:5px}
+.leg-block-title{font-size:11px;color:#555;letter-spacing:.06em;text-transform:uppercase;margin-bottom:2px}
+.leg-row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.leg-item{display:flex;align-items:center;gap:6px;font-size:12px;color:#7a7570}
+.leg-swatch{width:28px;height:9px;border-radius:4px;flex-shrink:0}
+.leg-dot{width:11px;height:11px;border-radius:50%;flex-shrink:0}
+.leg-ring{width:26px;height:9px;border-radius:4px;border:1.5px dashed rgba(255,200,80,0.5);flex-shrink:0;background:transparent}
+.leg-sep{width:1px;height:32px;background:rgba(255,255,255,0.07);margin:0 4px}
+.wrap{position:relative;user-select:none}
+canvas{display:block;cursor:default}
+#tip{position:absolute;pointer-events:none;background:rgba(6,6,16,0.97);border:0.5px solid rgba(255,200,80,0.35);border-radius:10px;padding:11px 15px;font-size:13px;color:#ccc;display:none;white-space:nowrap;z-index:10}
+#tip .tname{font-size:15px;font-weight:700;color:#e8e0c8;margin-bottom:6px}
+#tip .trow{font-size:12px;color:#888;margin-top:3px}
+#tip .tval{color:#ddd;font-weight:700}
+#tip .tgroup{font-size:11px;color:#6a5a40;margin-top:5px;letter-spacing:.03em}
+.bar{display:flex;gap:10px;align-items:center;padding:10px 0 0;flex-wrap:wrap;justify-content:center}
+button{background:rgba(255,255,255,0.05);border:0.5px solid rgba(255,255,255,0.14);color:#999;padding:7px 18px;border-radius:7px;cursor:pointer;font-size:13px;transition:background .15s}
+button:hover{background:rgba(255,255,255,0.11);color:#ccc}
+.hint{font-size:12px;color:#2a2a2a;text-align:center;padding-top:6px}
+</style>
+</head><body>
+
+<div class="header">
+  <div class="header-top">
+    <span class="header-title">Climate Galaxies</span>
+    <span class="header-sub">ERA5 Reanalysis · Europe · 1995–2025 · Annual Timeseries Anomalies</span>
+  </div>
+  <div class="header-desc">
+    Each galaxy = one <b>thematic group</b>. Each spiral arm = one variable's <b>annual anomaly</b> 1995→2025 (ref. period), spiralling outward through time. Arm width &amp; colour encode anomaly magnitude and sign.
+  </div>
+  <div class="legend" id="legend">
+    <!-- built by JS -->
+  </div>
+</div>
+
+<div class="wrap">
+  <canvas id="c"></canvas>
+  <div id="tip">
+    <div class="tname" id="tname"></div>
+    <div class="trow">Anomaly: <span class="tval" id="tval"></span></div>
+    <div class="trow">Year: <span class="tval" id="tyr"></span></div>
+    <div class="tgroup" id="tgroup"></div>
+  </div>
+</div>
+<div class="bar">
+  <button id="btn">⏸ Pause</button>
+  <button id="rst">↺ Restart</button>
+</div>
+<div class="hint">hover a ribbon to focus · hover elsewhere to unfocus</div>
+
+<script>
+const CELL_SIZE=800;
+const YEARS=Array.from({length:31},(_,i)=>1995+i);
+const YRS=31,Y0=1995;
+
+// pos = positive anomaly color, neg = negative anomaly color — one distinct pair per group
+const GROUPS=[
+  { label:'Heat & Moisture',
+    pos:[255,80,40],    // vivid orange-red
+    neg:[50,130,255],   // electric blue
+    vars:[
+      {name:'2m Temperature', unit:'°C',   v:[-0.4714,-0.9838,-0.6327,-0.5426,-0.1806,-0.2267,-0.2709,-0.1693,-0.229,-0.2518,-0.2657,-0.1147,0.0568,-0.0246,-0.1389,-0.2828,-0.164,-0.2079,-0.1258,0.319,0.1826,0.2853,0.1661,0.3216,0.3074,0.5509,0.162,0.5095,0.6812,0.9168,0.8242]},
+      {name:'Water Vapour',   unit:'kg/m²',v:[-0.3257,-0.7145,-0.214,-0.3955,-0.271,-0.7438,-0.4639,-0.1617,-0.2491,-0.3239,-0.3804,0.0593,-0.3021,-0.4949,-0.1905,0.1121,-0.1237,-0.2445,-0.159,0.3523,0.137,0.4487,-0.0275,0.8002,0.2476,0.3978,0.201,0.2958,0.7763,1.235,0.7225]},
+    ]},
+  { label:'Atmosphere',
+    pos:[40,220,120],   // bright green
+    neg:[220,50,160],   // hot pink
+    vars:[
+      {name:'Cloud Cover',  unit:'0–1',   v:[0.0051,0.0136,0.0105,0.0081,-0.0004,-0.0069,0.0039,0.0008,-0.0001,0.0086,0.0003,0.0046,-0.0095,-0.0034,0.0048,0.0193,-0.0058,-0.0051,0.0028,0.005,-0.0021,0.0039,-0.0072,0.0,-0.01,-0.0115,-0.0002,-0.0062,-0.0075,-0.0022,-0.0133]},
+      {name:'Ozone Column', unit:'kg/m²', v:[-0.0002,-0.0002,-0.0002,0.0,0.0,-0.0002,-0.0001,-0.0001,0.0,0.0,-0.0001,0.0,0.0,-0.0001,0.0001,0.0002,-0.0002,-0.0001,0.0001,0.0,0.0003,0.0,0.0001,0.0003,0.0002,-0.0001,0.0001,0.0001,0.0,0.0003,0.0]},
+      {name:'Wind Speed',   unit:'m/s',   v:[0.0659,-0.0026,-0.0376,0.0365,0.0203,-0.0159,-0.0408,0.0004,-0.0693,-0.0507,-0.0212,-0.0426,0.0208,0.07,-0.0179,-0.0654,0.0273,-0.0493,0.0671,-0.0056,0.119,-0.032,-0.004,0.0212,0.0203,0.1062,-0.0519,0.0208,-0.0461,0.0343,-0.0773]},
+    ]},
+  { label:'Water Cycle',
+    pos:[255,215,0],    // golden yellow
+    neg:[0,210,210],    // cyan
+    vars:[
+      {name:'Precipitation',unit:'mm',    v:[0.0058,-0.022,0.0313,0.0318,-0.0365,-0.0366,-0.0376,0.0071,-0.0502,-0.0243,-0.0558,0.0123,-0.0501,-0.0249,0.077,0.0696,-0.0341,0.0175,0.0094,0.0349,0.0085,-0.0033,-0.0407,0.0529,0.0153,0.0236,-0.0235,-0.0468,0.0426,0.0421,0.0045]},
+      {name:'Evaporation',  unit:'m w.e.',v:[-0.0000017,0.0000328,0.0000836,-0.00000085,-0.0000137,-0.0000048,-0.0000224,0.0000383,-0.0000044,0.0000025,-0.000018,0.0000221,-0.0000155,-0.0000918,-0.0000316,-0.0000702,0.0000041,-0.0000344,-0.000002,0.0000015,0.0000157,0.0000344,0.0000273,-0.00000034,0.0000132,-0.0000057,0.000024,0.0000151,0.0000066,-0.0000118,0.0000081]},
+      {name:'Snow Density', unit:'kg/m³', v:[1.4459,1.2763,0.8458,-0.1364,0.5117,-0.0955,-0.901,-0.0366,1.0559,0.3576,0.8294,0.1998,-1.2342,-0.5895,-0.0427,0.136,0.7823,0.6001,1.2094,-1.5493,0.1762,-0.6872,0.804,-0.0671,-0.0346,-0.7925,-0.5989,0.6286,-0.6724,-0.9108,-2.5104]},
+    ]},
+  { label:'Radiation',
+    pos:[190,80,255],   // vivid violet
+    neg:[255,155,0],    // amber
+    vars:[
+      {name:'Solar Rad.',   unit:'J/m²',  v:[-50058,-256644,-100259,-162846,-4787,-4690,-38842,10335,21284,-38697,-15470,-30523,53091,-6928,10372,-112942,-15983,10556,-46736,53931,-10348,-14105,37271,35640,77980,107394,69733,84007,107429,94513,136320]},
+      {name:'Thermal Rad.', unit:'J/m²',  v:[101212,147483,175551,50383,-8996,-72401,-2455,41969,25045,84511,39640,42163,-61489,-5130,58731,157079,-12563,36573,876,26879,-24214,-15484,-62210,-61850,-69896,-128057,-56696,-76532,-33142,-141420,-155561]},
+    ]},
+];
+
+// Build legend from GROUPS data
+(function(){
+  const leg=document.getElementById('legend');
+  // pos row
+  const posBlock=document.createElement('div');
+  posBlock.className='leg-block';
+  posBlock.innerHTML='<div class="leg-block-title">Positive anomaly</div>';
+  const posRow=document.createElement('div');
+  posRow.className='leg-row';
+  GROUPS.forEach(g=>{
+    const[r,gv,b]=g.pos;
+    posRow.innerHTML+=`<span class="leg-item"><span class="leg-swatch" style="background:rgb(${r},${gv},${b})"></span>${g.label}</span>`;
+  });
+  posBlock.appendChild(posRow);
+  leg.appendChild(posBlock);
+
+  const sep=document.createElement('div');sep.className='leg-sep';leg.appendChild(sep);
+
+  // neg row
+  const negBlock=document.createElement('div');
+  negBlock.className='leg-block';
+  negBlock.innerHTML='<div class="leg-block-title">Negative anomaly</div>';
+  const negRow=document.createElement('div');
+  negRow.className='leg-row';
+  GROUPS.forEach(g=>{
+    const[r,gv,b]=g.neg;
+    negRow.innerHTML+=`<span class="leg-item"><span class="leg-swatch" style="background:rgb(${r},${gv},${b})"></span>${g.label}</span>`;
+  });
+  negBlock.appendChild(negRow);
+  leg.appendChild(negBlock);
+
+  const sep2=document.createElement('div');sep2.className='leg-sep';leg.appendChild(sep2);
+
+  // misc
+  leg.innerHTML+=`
+    <div class="leg-block" style="justify-content:center;gap:6px;display:flex;flex-direction:column">
+      <span class="leg-item"><span class="leg-dot" style="background:radial-gradient(circle,#fff8cc,#ffcc00,#ff9900)"></span>Galaxy core = current year</span>
+      <span class="leg-item"><span class="leg-ring"></span>Orbit rings = year markers</span>
+    </div>`;
+})();
+
+function zscore(arr){
+  const mu=arr.reduce((a,b)=>a+b,0)/arr.length;
+  const sd=Math.sqrt(arr.reduce((a,b)=>a+(b-mu)**2,0)/arr.length)||1;
+  return arr.map(v=>(v-mu)/sd);
+}
+GROUPS.forEach(g=>g.vars.forEach(vr=>{vr.z=zscore(vr.v);}));
+
+const STEPS=60,TOTAL=(YRS-1)*STEPS;
+const TILT=0.38;
+const CELL=CELL_SIZE;
+const W=CELL*2,H=CELL*2;
+
+function makeSeries(z){
+  const out=[];
+  for(let i=0;i<YRS-1;i++)
+    for(let s=0;s<STEPS;s++){const mu=(1-Math.cos(s/STEPS*Math.PI))/2;out.push(z[i]*(1-mu)+z[i+1]*mu);}
+  out.push(z[YRS-1]);
+  return out;
+}
+GROUPS.forEach(g=>g.vars.forEach(vr=>{vr.series=makeSeries(vr.z);}));
+GROUPS.forEach(g=>{
+  g.maxV=Math.max(...g.vars.flatMap(vr=>vr.series.map(Math.abs)),0.001);
+});
+
+const DPR=window.devicePixelRatio||1;
+const canvas=document.getElementById('c');
+canvas.style.width=W+'px';canvas.style.height=H+'px';
+canvas.width=W*DPR;canvas.height=H*DPR;
+document.querySelector('.wrap').style.width=W+'px';
+const ctx=canvas.getContext('2d');
+ctx.scale(DPR,DPR);
+
+const STARS=[];
+const rng=(()=>{let s=42;return()=>{s=(s*1664525+1013904223)&0xffffffff;return(s>>>0)/0xffffffff;};})();
+for(let i=0;i<600;i++){
+  STARS.push({x:rng()*W,y:rng()*H,r:rng()<0.15?rng()*1.6+0.9:rng()*0.8+0.15,a:rng()*0.6+0.1,twinkle:rng()*Math.PI*2,speed:rng()*1.4+0.3});
+}
+const CENTRES=[[CELL*0.5,CELL*0.5],[CELL*1.5,CELL*0.5],[CELL*0.5,CELL*1.5],[CELL*1.5,CELL*1.5]];
+const NEBULAE=[];
+CENTRES.forEach(([cx,cy],gi)=>{
+  const[pr,pg,pb]=GROUPS[gi].pos;
+  for(let k=0;k<3;k++){
+    NEBULAE.push({x:cx+(rng()-0.5)*CELL*0.45,y:cy+(rng()-0.5)*CELL*0.35,rx:rng()*CELL*0.18+CELL*0.08,ry:rng()*CELL*0.12+CELL*0.05,r:pr,g:pg,b:pb,a:rng()*0.022+0.008});
+  }
+});
+
+const R_MIN=20,R_MAX=CELL*0.44;
+
+function spiralPt(N,ri,fi,series,maxV){
+  const t=fi/TOTAL,r=R_MIN+t*(R_MAX-R_MIN);
+  const base=(ri/N)*Math.PI*2-Math.PI/2;
+  const angle=base+t*1.6*Math.PI*2;
+  const v=series[fi];
+  const wb=(v/maxV)*18*Math.sqrt(t+0.05);
+  const pa=angle+Math.PI/2;
+  return[r*Math.cos(angle)+wb*Math.cos(pa),(r*Math.sin(angle)+wb*Math.sin(pa))*(1-TILT)];
+}
+
+GROUPS.forEach((g,gi)=>{
+  const[cx,cy]=CENTRES[gi];
+  const N=g.vars.length;
+  g.segPts=g.vars.map((vr,ri)=>{
+    const pts=[];
+    for(let fi=0;fi<=TOTAL;fi++){
+      const[lx,ly]=spiralPt(N,ri,fi,vr.series,g.maxV);
+      pts.push([cx+lx,cy+ly]);
+    }
+    return pts;
+  });
+});
+
+// CLEAN color: full RGB, no brightness dimming — only alpha scales with anomaly magnitude
+function aColor(g,v,alpha=1){
+  const t=Math.min(Math.abs(v)/g.maxV,1);
+  const[pr,pg,pb]=v>=0?g.pos:g.neg;
+  // alpha: 0.25 at zero anomaly → 0.7 at peak — no RGB darkening
+  const a=Math.min((0.25+0.45*t)*alpha, 0.7);
+  return`rgba(${pr},${pg},${pb},${a})`;
+}
+
+function formatVal(v,unit){
+  const abs=Math.abs(v);
+  let s;
+  if(abs>=10000)s=(v/1000).toFixed(1)+'k';
+  else if(abs>=100)s=v.toFixed(0);
+  else if(abs>=1)s=v.toFixed(3);
+  else if(abs>=0.001)s=v.toFixed(5);
+  else s=v.toExponential(2);
+  return(v>=0?'+':'')+s+' '+unit;
+}
+
+let hovG=-1,hovR=-1,hovF=-1;
+const tip=document.getElementById('tip');
+
+canvas.addEventListener('mousemove',e=>{
+  const rect=canvas.getBoundingClientRect();
+  const sx=W/rect.width,sy=H/rect.height;
+  const mx=(e.clientX-rect.left)*sx,my=(e.clientY-rect.top)*sy;
+  const fi=Math.min(Math.floor(frame),TOTAL);
+  let best=32,bG=-1,bR=-1,bF=-1;
+  for(let gi=0;gi<4;gi++){
+    const g=GROUPS[gi];
+    for(let ri=0;ri<g.vars.length;ri++){
+      for(let s=1;s<=Math.min(fi,TOTAL);s+=2){
+        const[wx,wy]=g.segPts[ri][s];
+        const d=Math.hypot(wx-mx,wy-my);
+        if(d<best){best=d;bG=gi;bR=ri;bF=s;}
+      }
+    }
+  }
+  if(bG>=0){
+    hovG=bG;hovR=bR;hovF=bF;
+    const vr=GROUPS[bG].vars[bR];
+    const yi=Math.min(Math.round(bF/STEPS),YRS-1);
+    document.getElementById('tname').textContent=vr.name;
+    document.getElementById('tval').textContent=formatVal(vr.v[yi],vr.unit);
+    document.getElementById('tyr').textContent=YEARS[yi];
+    document.getElementById('tgroup').textContent=GROUPS[bG].label;
+    tip.style.display='block';
+    const tipW=210;
+    const ex=e.clientX-rect.left,ey=e.clientY-rect.top;
+    tip.style.left=Math.min(ex+16,rect.width-tipW)+'px';
+    tip.style.top=Math.max(ey-10,4)+'px';
+  } else {
+    hovG=-1;tip.style.display='none';
+  }
+});
+canvas.addEventListener('mouseleave',()=>{hovG=-1;tip.style.display='none';});
+
+let elapsed=0;
+function drawStars(dt){
+  elapsed+=dt;
+  for(const s of STARS){
+    const flicker=s.a*(0.65+0.35*Math.sin(elapsed*s.speed+s.twinkle));
+    ctx.beginPath();ctx.arc(s.x,s.y,s.r,0,Math.PI*2);
+    ctx.fillStyle=`rgba(255,255,255,${flicker})`;ctx.fill();
+  }
+  for(const n of NEBULAE){
+    ctx.save();ctx.translate(n.x,n.y);ctx.scale(1,n.ry/n.rx);
+    const gr=ctx.createRadialGradient(0,0,0,0,0,n.rx);
+    gr.addColorStop(0,`rgba(${n.r},${n.g},${n.b},${n.a})`);
+    gr.addColorStop(1,`rgba(${n.r},${n.g},${n.b},0)`);
+    ctx.beginPath();ctx.arc(0,0,n.rx,0,Math.PI*2);
+    ctx.fillStyle=gr;ctx.fill();ctx.restore();
+  }
+}
+
+function drawGalaxy(gi,fi,g){
+  const[cx,cy]=CENTRES[gi];
+  const N=g.vars.length;
+  const[pr,pg,pb]=g.pos;
+  const anyHov=hovG>=0;
+  const thisGalHov=gi===hovG;
+
+  // orbit rings
+  for(let ring=0;ring<4;ring++){
+    const rr=R_MIN+(ring+1)/4.5*(R_MAX-R_MIN);
+    const yLabel=Y0+Math.round((ring+1)/4*(YRS-1));
+    ctx.save();ctx.translate(cx,cy);ctx.scale(1,1-TILT);
+    ctx.beginPath();ctx.arc(0,0,rr,0,Math.PI*2);ctx.restore();
+    const ringAlpha=anyHov?(thisGalHov?0.07:0.015):0.07;
+    ctx.strokeStyle=`rgba(255,200,80,${ringAlpha})`;ctx.lineWidth=0.7;
+    ctx.setLineDash([3,11]);ctx.stroke();ctx.setLineDash([]);
+    const labelAlpha=anyHov?(thisGalHov?0.25:0.04):0.25;
+    ctx.fillStyle=`rgba(255,200,80,${labelAlpha})`;
+    ctx.font='12px "Comic Sans MS","Comic Sans",cursive';
+    ctx.textAlign='left';ctx.fillText(yLabel,cx+rr+3,cy+4);
+  }
+
+  // ribbons
+  for(let ri=0;ri<N;ri++){
+    if(fi<1)continue;
+    const vr=g.vars[ri];
+    const isHov=(gi===hovG&&ri===hovR);
+
+    let baseAlpha;
+    if(!anyHov) baseAlpha=1;
+    else if(isHov) baseAlpha=1;
+    else baseAlpha=0;
+
+    for(let s=1;s<=Math.min(fi,TOTAL);s++){
+      const t1=s/TOTAL;
+      const v=(vr.series[s-1]+vr.series[s])/2;
+      const[x0,y0]=g.segPts[ri][s-1];
+      const[x1,y1]=g.segPts[ri][s];
+      const w=(4+Math.abs(v/g.maxV)*22*(0.3+0.7*t1))*(isHov?2:1);
+      ctx.beginPath();ctx.moveTo(x0,y0);ctx.lineTo(x1,y1);
+      ctx.strokeStyle=aColor(g,v,baseAlpha);
+      ctx.lineWidth=Math.max(1,w);ctx.lineCap='round';ctx.stroke();
+    }
+
+    const fi2=Math.min(fi,TOTAL);
+    const[tx,ty]=g.segPts[ri][fi2];
+    const v=vr.series[fi2];
+    const dotR=(6+Math.abs(v/g.maxV)*5)*(isHov?1.7:1);
+    ctx.beginPath();ctx.arc(tx,ty,dotR,0,Math.PI*2);
+    ctx.fillStyle=aColor(g,v,baseAlpha*(isHov?1:0.95));ctx.fill();
+
+    if(isHov&&hovF>=0){
+      const[hx,hy]=g.segPts[ri][Math.min(hovF,TOTAL)];
+      ctx.beginPath();ctx.arc(hx,hy,14,0,Math.PI*2);
+      ctx.strokeStyle='rgba(255,255,255,0.9)';ctx.lineWidth=2;ctx.stroke();
+    }
+
+    // label — use pos color of the group
+    const[lx,ly]=g.segPts[ri][fi2];
+    const tAngle=(ri/N)*Math.PI*2-Math.PI/2+1.6*Math.PI*2*(fi2/TOTAL);
+    const offX=Math.cos(tAngle)*26,offY=Math.sin(tAngle)*(1-TILT)*26;
+    const labelA=anyHov?(isHov?1:1):1;
+    ctx.font=(isHov?'bold ':'')+`15px "Comic Sans MS","Comic Sans",cursive`;
+    ctx.fillStyle=isHov?`rgba(${pr},${pg},${pb},1)`:`rgba(${pr},${pg},${pb},${labelA})`;
+    ctx.textAlign=offX>0?'left':'right';
+    ctx.fillText(vr.name,lx+offX,ly+offY+3);
+  }
+
+  // core glow
+  const coreAlpha=anyHov?(thisGalHov?1:0.25):1;
+  const coreR=26;
+  const gr=ctx.createRadialGradient(cx,cy,1,cx,cy,coreR);
+  gr.addColorStop(0,`rgba(255,248,204,${coreAlpha})`);
+  gr.addColorStop(0.4,`rgba(255,204,0,${coreAlpha})`);
+  gr.addColorStop(0.75,`rgba(255,153,0,${coreAlpha})`);
+  gr.addColorStop(1,'rgba(255,100,0,0)');
+  ctx.beginPath();ctx.arc(cx,cy,coreR,0,Math.PI*2);ctx.fillStyle=gr;ctx.fill();
+
+  const yearAlpha=anyHov?(thisGalHov?1:0.15):1;
+  ctx.fillStyle=`rgba(255,255,255,${yearAlpha})`;
+  ctx.font=`bold 15px "Comic Sans MS","Comic Sans",cursive`;
+  ctx.textAlign='center';
+  ctx.fillText(YEARS[Math.min(Math.floor(fi/STEPS),YRS-1)],cx,cy+5);
+
+  const glabelAlpha=anyHov?(thisGalHov?0.75:0.1):0.7;
+  ctx.fillStyle=`rgba(${pr},${pg},${pb},${glabelAlpha})`;
+  ctx.font=`bold 13px "Comic Sans MS","Comic Sans",cursive`;
+  ctx.fillText(g.label,cx,cy+coreR+18);
+}
+
+function drawFrame(f,dt){
+  const fi=Math.min(Math.floor(f),TOTAL);
+  ctx.clearRect(0,0,W,H);
+  ctx.fillStyle='#03030a';ctx.fillRect(0,0,W,H);
+  drawStars(dt||0);
+  ctx.strokeStyle='rgba(255,255,255,0.02)';ctx.lineWidth=0.5;
+  ctx.beginPath();ctx.moveTo(W/2,0);ctx.lineTo(W/2,H);ctx.stroke();
+  ctx.beginPath();ctx.moveTo(0,H/2);ctx.lineTo(W,H/2);ctx.stroke();
+  for(let gi=0;gi<4;gi++) drawGalaxy(gi,fi,GROUPS[gi]);
+}
+
+let frame=0,running=true,last=null;
+const SPEED=8;
+function tick(ts){
+  requestAnimationFrame(tick);
+  const dt=last?Math.min((ts-last)/1000,0.05):0;
+  last=ts;
+  if(running){
+    frame+=dt*SPEED*STEPS*0.5;
+    if(frame>=TOTAL){frame=TOTAL;running=false;document.getElementById('btn').textContent='▶ Play';}
+  }
+  drawFrame(frame,dt);
+}
+drawFrame(0,0);
+requestAnimationFrame(tick);
+document.getElementById('btn').onclick=function(){if(frame>=TOTAL)frame=0;running=!running;last=null;this.textContent=running?'⏸ Pause':'▶ Play';};
+document.getElementById('rst').onclick=function(){frame=0;running=true;last=null;document.getElementById('btn').textContent='⏸ Pause';};
+</script>
+</body></html>

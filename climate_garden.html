@@ -1,0 +1,612 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Climate Garden — Annual Cycles</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.8.5/d3.min.js"></script>
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --font:      "Comic Sans MS", "Comic Sans", cursive;
+  --bg:        #c8a96e;          /* warm coffee */
+  --bg2:       #b5924e;          /* darker coffee for cells */
+  --green:     #4a7c3f;          /* garden green */
+  --green-lt:  #7ab870;          /* light green accent */
+  --soil:      #8b5e2a;          /* rich soil brown */
+  --text-hi:   #1a0e00;          /* near-black — max contrast */
+  --text-mid:  #3a2208;          /* dark brown */
+  --text-lo:   #5c3a10;          /* medium brown */
+  --card-bg:   rgba(255,240,200,0.55);
+  --border:    rgba(90,55,10,0.25);
+}
+
+body {
+  font-family: var(--font);
+  background: var(--bg);
+  color: var(--text-hi);
+  min-height: 100vh;
+  overflow-x: hidden;
+}
+
+/* ── Garden background — warm earthy gradient with green hints ── */
+body::before {
+  content: '';
+  position: fixed; inset: 0; z-index: 0;
+  background:
+    radial-gradient(ellipse 90% 50% at 50% 0%,   #d4b87a 0%, transparent 65%),
+    radial-gradient(ellipse 55% 45% at 10% 100%,  #5a8a40 0%, transparent 55%),
+    radial-gradient(ellipse 55% 45% at 90% 100%,  #6a9448 0%, transparent 55%),
+    radial-gradient(ellipse 70% 35% at 50% 100%,  #4a6e30 0%, transparent 50%);
+  pointer-events: none;
+}
+
+/* ── Header ── */
+header {
+  position: relative; z-index: 10;
+  text-align: center;
+  padding: 3rem 2rem 1.4rem;
+  border-bottom: 2px solid var(--soil);
+  background: rgba(255,240,195,0.45);
+}
+header .eyebrow {
+  font-family: var(--font);
+  font-size: 14px;
+  color: var(--green);
+  font-weight: bold;
+  margin-bottom: 0.5rem;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+}
+header h1 {
+  font-family: var(--font);
+  font-weight: bold;
+  font-size: clamp(2rem, 5vw, 3.4rem);
+  color: var(--text-hi);
+  margin-bottom: 0.5rem;
+  text-shadow: 1px 1px 0 rgba(255,220,150,0.6);
+}
+header p.sub {
+  font-size: 1.15rem;
+  color: var(--text-mid);
+}
+
+/* ── Instruction bar ── */
+.hint-bar {
+  position: relative; z-index: 10;
+  text-align: center;
+  padding: 0.9rem 1rem;
+  font-size: 15px;
+  font-family: var(--font);
+  color: var(--text-mid);
+  background: rgba(255,235,180,0.40);
+  border-bottom: 1px solid var(--border);
+}
+
+/* ── Garden grid — 3 per row ── */
+#garden {
+  position: relative; z-index: 5;
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 3rem 1.5rem;
+  padding: 3rem 2rem 5rem;
+}
+
+/* ── Flower cell — no borders, no background ── */
+.flower-cell {
+  cursor: pointer;
+  text-align: center;
+  padding: 1rem 3rem 3rem;
+}
+
+/* Cell header */
+.cell-header {
+  text-align: center;
+  margin-bottom: 2rem;
+}
+.cell-varname {
+  font-family: var(--font);
+  font-size: 14px;
+  color: var(--green);
+  font-weight: bold;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+}
+.cell-title {
+  font-family: var(--font);
+  font-size: 1.35rem;
+  font-weight: bold;
+  color: var(--text-hi);
+  line-height: 1.25;
+  margin-top: 3px;
+}
+.cell-unit {
+  font-family: var(--font);
+  font-size: 1.05rem;
+  color: var(--text-lo);
+  margin-top: 3px;
+}
+
+/* SVG container */
+.flower-wrap {
+  width: 100%;
+  aspect-ratio: 1/1;
+  max-width: 430px;
+  margin: 0 auto;
+}
+.flower-wrap svg { overflow: visible; }
+
+/* ── Tooltip ── */
+#tooltip {
+  position: fixed;
+  pointer-events: none;
+  opacity: 0;
+  background: rgba(255,243,210,0.97);
+  border: 2px solid var(--soil);
+  border-radius: 10px;
+  padding: 12px 20px;
+  font-family: var(--font);
+  font-size: 14px;
+  color: var(--text-hi);
+  box-shadow: 0 6px 24px rgba(80,40,0,0.25);
+  transition: opacity 0.12s;
+  z-index: 9999;
+}
+#tooltip .tt-var   { font-size: 13px; color: var(--green); font-weight: bold; text-transform: uppercase; letter-spacing: 0.1em; margin-bottom: 4px; }
+#tooltip .tt-month { font-weight: bold; font-size: 20px; margin-bottom: 2px; color: var(--text-hi); }
+#tooltip .tt-val   { font-size: 14px; color: var(--text-lo); }
+
+/* ── Footer ── */
+footer {
+  position: relative; z-index: 10;
+  text-align: center;
+  padding: 1.8rem 2rem;
+  font-family: var(--font);
+  font-size: 14px;
+  color: var(--text-mid);
+  background: rgba(255,235,180,0.40);
+  border-top: 2px solid var(--soil);
+}
+
+
+</style>
+</head>
+<body>
+
+<header>
+  <div class="eyebrow">ERA5 Reanalysis · Europe · 1995–2025 · Annual Cycle</div>
+  <h2>Climate Garden</h2>
+  <p class="sub">Ten flowers, ten variables — one annual cycle each</p>
+</header>
+
+<div id="garden"></div>
+
+
+<div id="tooltip">
+  <div class="tt-month" id="tt-month"></div>
+  <div class="tt-val"   id="tt-val"></div>
+</div>
+
+<script>
+/* ═══════════════════════════════════════════════════════════════
+   ALL CLIMATE DATA — embedded from annual_cycle.csv
+   (no server required; open directly as file://)
+   ═══════════════════════════════════════════════════════════════ */
+const CLIMATE_DATA = [
+  {
+    variable: "t2m",
+    name: "2m Air Temperature",
+    unit: "°C",
+    colorRamp: [[0,"#6a00a8"],[0.25,"#00b4d8"],[0.5,"#80ffb4"],[0.75,"#ffb700"],[1,"#ff2a00"]],
+    data: [
+      {label:"Jan",value:4.70},{label:"Feb",value:5.05},{label:"Mar",value:6.98},
+      {label:"Apr",value:10.03},{label:"May",value:13.61},{label:"Jun",value:17.13},
+      {label:"Jul",value:19.44},{label:"Aug",value:19.50},{label:"Sep",value:16.72},
+      {label:"Oct",value:12.96},{label:"Nov",value:8.91},{label:"Dec",value:5.98}
+    ]
+  },
+  {
+    variable: "si10",
+    name: "10m Wind Speed",
+    unit: "m s⁻¹",
+    colorRamp: [[0,"#fff5f7"],[0.3,"#ffc2d1"],[0.6,"#ff5d8f"],[1,"#6a0572"]],
+          data: [
+      {label:"Jan",value:6.131},{label:"Feb",value:6.110},{label:"Mar",value:5.866},
+      {label:"Apr",value:5.355},{label:"May",value:4.944},{label:"Jun",value:4.668},
+      {label:"Jul",value:4.591},{label:"Aug",value:4.618},{label:"Sep",value:5.022},
+      {label:"Oct",value:5.443},{label:"Nov",value:5.792},{label:"Dec",value:6.082}
+    ]
+  },
+  {
+    variable: "tcc",
+    name: "Total Cloud Cover",
+    unit: "(0 – 1)",
+    colorRamp: [[0,"#f8ffff"],[0.35,"#b8f0ff"],[0.7,"#00c8d7"],[1,"#005f73"]],        data: [
+      {label:"Jan",value:0.684},{label:"Feb",value:0.659},{label:"Mar",value:0.618},
+      {label:"Apr",value:0.584},{label:"May",value:0.558},{label:"Jun",value:0.512},
+      {label:"Jul",value:0.478},{label:"Aug",value:0.478},{label:"Sep",value:0.537},
+      {label:"Oct",value:0.606},{label:"Nov",value:0.662},{label:"Dec",value:0.688}
+    ]
+  },
+  {
+    variable: "rsn",
+    name: "Snow Density",
+    unit: "kg m⁻³",
+    colorRamp: [[0,"#fffdf5"],[0.3,"#fff1a8"],[0.6,"#ffd166"],[1,"#b8860b"]],    
+    data: [
+      {label:"Jan",value:121.4},{label:"Feb",value:124.4},{label:"Mar",value:125.5},
+      {label:"Apr",value:118.2},{label:"May",value:106.8},{label:"Jun",value:101.7},
+      {label:"Jul",value:100.8},{label:"Aug",value:100.8},{label:"Sep",value:101.2},
+      {label:"Oct",value:104.4},{label:"Nov",value:110.6},{label:"Dec",value:116.9}
+    ]
+  },
+  {
+    variable: "tco3",
+    name: "Total Column Ozone",
+    unit: "kg m⁻²",
+    colorRamp: [[0,"#f8f7ff"],[0.3,"#d0bfff"],[0.6,"#9d4edd"],[1,"#5a189a"]],
+            data: [
+      {label:"Jan",value:0.007029},{label:"Feb",value:0.007435},{label:"Mar",value:0.007731},
+      {label:"Apr",value:0.007751},{label:"May",value:0.007529},{label:"Jun",value:0.007118},
+      {label:"Jul",value:0.006788},{label:"Aug",value:0.006545},{label:"Sep",value:0.006306},
+      {label:"Oct",value:0.006148},{label:"Nov",value:0.006244},{label:"Dec",value:0.006543}
+    ]
+  },
+  {
+    variable: "tcwv",
+    name: "Water Vapour Column",
+    unit: "kg m⁻²",
+    colorRamp: [[0,"#440154"],[0.25,"#3b528b"],[0.5,"#21918c"],[0.75,"#5ec962"],[1,"#fde725"]],
+        data: [
+      {label:"Jan",value:10.40},{label:"Feb",value:10.12},{label:"Mar",value:10.68},
+      {label:"Apr",value:12.57},{label:"May",value:15.83},{label:"Jun",value:19.66},
+      {label:"Jul",value:22.33},{label:"Aug",value:22.65},{label:"Sep",value:20.33},
+      {label:"Oct",value:17.08},{label:"Nov",value:13.59},{label:"Dec",value:11.57}
+    ]
+  },
+  {
+    variable: "tp",
+    name: "Total Precipitation",
+    unit: "mm day⁻¹",
+    colorRamp: [[0,"#00204d"],[0.25,"#414487"],[0.5,"#7e03a8"],[0.75,"#cc4778"],[1,"#f0f921"]],
+        data: [
+      {label:"Jan",value:2.448},{label:"Feb",value:2.253},{label:"Mar",value:2.015},
+      {label:"Apr",value:1.760},{label:"May",value:1.666},{label:"Jun",value:1.584},
+      {label:"Jul",value:1.536},{label:"Aug",value:1.626},{label:"Sep",value:1.990},
+      {label:"Oct",value:2.450},{label:"Nov",value:2.563},{label:"Dec",value:2.620}
+    ]
+  },
+  {
+    variable: "tsr",
+    name: "Solar Radiation (top)",
+    unit: "J m⁻²",
+    colorRamp: [[0,"#fff0a0"],[0.25,"#ffd030"],[0.55,"#ff9000"],[0.8,"#e84800"],[1,"#8c1800"]],
+    data: [
+      {label:"Jan",value:6708085},{label:"Feb",value:10053263},{label:"Mar",value:15640694},
+      {label:"Apr",value:22141211},{label:"May",value:27321095},{label:"Jun",value:29776743},
+      {label:"Jul",value:28664893},{label:"Aug",value:24484537},{label:"Sep",value:18255863},
+      {label:"Oct",value:12106459},{label:"Nov",value:7682611},{label:"Dec",value:5866069}
+    ]
+  },
+  {
+    variable: "e",
+    name: "Evaporation",
+    unit: "m water eq.",
+    colorRamp: [[0,"#2c7bb6"],[0.2,"#abd9e9"],[0.4,"#ffffbf"],[0.6,"#fdae61"],[0.8,"#d7191c"],[1,"#ffffff"]],
+        data: [
+      {label:"Jan",value:-0.001889},{label:"Feb",value:-0.001841},{label:"Mar",value:-0.001812},
+      {label:"Apr",value:-0.001843},{label:"May",value:-0.001927},{label:"Jun",value:-0.002034},
+      {label:"Jul",value:-0.002081},{label:"Aug",value:-0.002079},{label:"Sep",value:-0.002106},
+      {label:"Oct",value:-0.002060},{label:"Nov",value:-0.002132},{label:"Dec",value:-0.001995}
+    ]
+  },
+  {
+    variable: "ttr",
+    name: "Thermal Radiation (top)",
+    unit: "J m⁻²",
+    colorRamp: [[0,"#ffe0d0"],[0.25,"#ff9878"],[0.55,"#e84828"],[0.8,"#981808"],[1,"#480800"]],
+    data: [
+      {label:"Jan",value:-18791515},{label:"Feb",value:-18925835},{label:"Mar",value:-19348530},
+      {label:"Apr",value:-20036272},{label:"May",value:-20897335},{label:"Jun",value:-22033153},
+      {label:"Jul",value:-22884218},{label:"Aug",value:-22667907},{label:"Sep",value:-21598614},
+      {label:"Oct",value:-20427130},{label:"Nov",value:-19504936},{label:"Dec",value:-18897636}
+    ]
+  }
+];
+
+/* ═══════════════════════════════════════════════════════════════
+   FLOWER SIZES — vary each flower so the garden feels organic
+   ═══════════════════════════════════════════════════════════════ */
+const FLOWER_SIZES = [
+  { scale: 118, centerR: 46, labelFS: 20, pLenMin: 0.60, pLenMax: 0.95, pWidBase: 0.26, pWidScale: 0.14 },
+  { scale: 112, centerR: 43, labelFS: 19, pLenMin: 0.65, pLenMax: 0.90, pWidBase: 0.30, pWidScale: 0.10 },
+  { scale: 122, centerR: 50, labelFS: 20, pLenMin: 0.55, pLenMax: 1.00, pWidBase: 0.24, pWidScale: 0.16 },
+  { scale: 115, centerR: 45, labelFS: 20, pLenMin: 0.68, pLenMax: 0.88, pWidBase: 0.28, pWidScale: 0.12 },
+  { scale: 108, centerR: 41, labelFS: 19, pLenMin: 0.70, pLenMax: 0.85, pWidBase: 0.32, pWidScale: 0.08 },
+  { scale: 124, centerR: 49, labelFS: 20, pLenMin: 0.58, pLenMax: 0.98, pWidBase: 0.22, pWidScale: 0.18 },
+  { scale: 113, centerR: 46, labelFS: 20, pLenMin: 0.62, pLenMax: 0.92, pWidBase: 0.27, pWidScale: 0.13 },
+  { scale: 119, centerR: 47, labelFS: 20, pLenMin: 0.64, pLenMax: 0.94, pWidBase: 0.25, pWidScale: 0.15 },
+  { scale: 106, centerR: 41, labelFS: 19, pLenMin: 0.72, pLenMax: 0.86, pWidBase: 0.31, pWidScale: 0.09 },
+  { scale: 122, centerR: 49, labelFS: 20, pLenMin: 0.57, pLenMax: 0.96, pWidBase: 0.23, pWidScale: 0.17 },
+];
+
+/* ── shared tooltip ── */
+const tooltip = document.getElementById("tooltip");
+const ttVar   = document.getElementById("tt-var");
+const ttMonth = document.getElementById("tt-month");
+const ttVal   = document.getElementById("tt-val");
+
+function interpColor(ramp, t){
+  t = Math.max(0, Math.min(1, t));
+  for(let i=0; i<ramp.length-1; i++){
+    const [t0,c0]=ramp[i], [t1,c1]=ramp[i+1];
+    if(t>=t0 && t<=t1) return d3.interpolateRgb(c0,c1)((t-t0)/(t1-t0));
+  }
+  return ramp[ramp.length-1][1];
+}
+
+function formatValue(v, unit){
+  const abs = Math.abs(v);
+  if(abs >= 1e6)  return (v/1e6).toFixed(2)+" M "+unit;
+  if(abs >= 1e3)  return (v/1e3).toFixed(1)+" k "+unit;
+  if(abs < 0.01)  return v.toExponential(3)+" "+unit;
+  return v.toFixed(3)+" "+unit;
+}
+
+/* ── wind state ── */
+const allGroups = [];  // [{path, buildPath, windPhase, windSpeed, windAmp, _g}]
+
+function buildFlower(container, dataset, sizeConf){
+  const W=700, H=700, cx=W/2, cy=H/2;
+  const {data, colorRamp, variable, name, unit} = dataset;
+  const {scale, centerR, labelFS, pLenMin, pLenMax, pWidBase, pWidScale} = sizeConf;
+
+  const n     = data.length;
+  const vals  = data.map(d=>Math.abs(d.value));  /* abs so negatives still spread */
+  const vmin  = Math.min(...vals), vmax = Math.max(...vals);
+  const norm  = v => vmax===vmin ? 1 : (Math.abs(v)-vmin)/(vmax-vmin);
+
+  const svg  = d3.select(container);
+  const defs = svg.append("defs");
+
+  data.forEach((d,i)=>{
+    const t    = norm(d.value);
+    const base = interpColor(colorRamp, t);
+    const dc   = d3.color(base);
+    dc.r = Math.min(255, dc.r+90); dc.g = Math.min(255, dc.g+90); dc.b = Math.min(255, dc.b+90);
+    const hi   = dc.formatHex();
+
+    const gid = `gr-${variable}-${i}`;
+    const ghid= `gh-${variable}-${i}`;
+
+    const g = defs.append("radialGradient").attr("id",gid)
+      .attr("cx","35%").attr("cy","28%").attr("r","72%");
+    g.append("stop").attr("offset","0%").attr("stop-color",hi).attr("stop-opacity","0.97");
+    g.append("stop").attr("offset","55%").attr("stop-color",base).attr("stop-opacity","0.97");
+    g.append("stop").attr("offset","100%").attr("stop-color",base).attr("stop-opacity","0.97");
+
+    const gh = defs.append("radialGradient").attr("id",ghid)
+      .attr("cx","35%").attr("cy","28%").attr("r","72%");
+    gh.append("stop").attr("offset","0%").attr("stop-color","#ffffff").attr("stop-opacity","0.99");
+    gh.append("stop").attr("offset","40%").attr("stop-color",hi).attr("stop-opacity","0.99");
+    gh.append("stop").attr("offset","100%").attr("stop-color",base).attr("stop-opacity","0.99");
+  });
+
+  const petalGroups = [];
+
+  data.forEach((d,i)=>{
+    const t         = norm(d.value);
+    const baseAngle = (2*Math.PI*i/n) - Math.PI/2;
+    const pLen      = pLenMin + pLenMax * t;
+    const pWid      = pWidBase + pWidScale * pLen;
+    const pts       = 90;
+    const theta     = d3.range(pts).map(k=>(2*Math.PI*k)/(pts-1));
+    const base      = interpColor(colorRamp, t);
+    const gid       = `gr-${variable}-${i}`;
+    const ghid      = `gh-${variable}-${i}`;
+
+    function buildPath(angleOffset, overrideLen){
+      const a  = baseAngle + angleOffset;
+      const L  = (overrideLen !== undefined) ? overrideLen : pLen;
+      return d3.line()(theta.map(ang=>{
+        const xl = pWid*Math.cos(ang)*scale;
+        const yl = (L*Math.sin(ang)+(centerR/scale)+L)*scale;
+        return [ cx + xl*Math.cos(a) - yl*Math.sin(a),
+                 cy + xl*Math.sin(a) + yl*Math.cos(a) ];
+      })) + "Z";
+    }
+
+    const pg = svg.append("g").attr("class","petal-group").style("cursor","pointer");
+    const path = pg.append("path")
+      .attr("d", buildPath(0))
+      .attr("fill", `url(#${gid})`)
+      .attr("stroke", base)
+      .attr("stroke-width", 1.0)
+      .attr("stroke-opacity", 0.85)
+      .attr("opacity", 0.92);
+
+    /* label at petal tip */
+    const tipDist   = centerR + pLen * scale * 2;
+    const labelOff  = 22 + labelFS * 1.3;
+    const labelDist = tipDist + labelOff;
+    const lx = cx - labelDist * Math.sin(baseAngle);
+    const ly = cy + labelDist * Math.cos(baseAngle);
+    const lineH = labelFS * 1.3;
+    const topY  = ly - lineH / 2 + labelFS * 0.35;
+
+    const lbl = svg.append("text")
+      .attr("x", lx).attr("y", topY)
+      .attr("text-anchor","middle")
+      .style("font-family","'Comic Sans MS', 'Comic Sans', cursive");
+
+    lbl.append("tspan")
+      .attr("x",lx).attr("dy","0")
+      .style("font-size", (labelFS+4)+"px")
+      .style("font-weight","bold")
+      .style("fill","#6b3a10")
+      .text(d.label);
+
+    lbl.append("tspan")
+      .attr("x",lx).attr("dy", (lineH+4)+"px")
+      .style("font-size", (labelFS+1)+"px")
+      .style("font-weight","bold")
+      .style("fill","#8b5a2a")
+      .text(Math.abs(d.value) >= 1e6
+        ? (d.value/1e6).toFixed(1)+"M"
+        : Math.abs(d.value) < 0.01
+        ? d.value.toExponential(2)
+        : d.value.toFixed(Math.abs(d.value)>=10?1:Math.abs(d.value)>=1?2:3));
+
+    /* wind */
+    const windPhase = Math.random()*Math.PI*2;
+    const windSpeed = 1.95 + Math.random()*0.95;
+    const windAmp   = (0.016 + Math.random()*0.022)*(1-t*0.28);
+
+    pg._hov = false;
+
+    pg.on("mouseenter", function(event){
+        path.interrupt();
+        path.transition().duration(120)
+          .attr("fill",`url(#${ghid})`)
+          .attr("stroke-width",2.0).attr("opacity",1)
+          .attr("transform",`translate(${Math.cos(baseAngle)*8},${Math.sin(baseAngle)*8})`);
+        ttMonth.textContent = d.label;
+        ttVal.textContent   = formatValue(d.value, unit);
+        tooltip.style.opacity = "0.6";
+        pg._hov = true;
+      })
+      .on("mousemove", function(ev){
+        tooltip.style.left = (ev.clientX+20)+"px";
+        tooltip.style.top  = (ev.clientY-56)+"px";
+      })
+      .on("mouseleave", function(){
+        pg._hov = false;
+        path.transition().duration(200)
+          .attr("fill",`url(#${gid})`)
+          .attr("stroke-width",1.0).attr("opacity",0.92)
+          .attr("transform","translate(0,0)");
+        tooltip.style.opacity = "0";
+      });
+
+    petalGroups.push({path, buildPath, lbl, windPhase, windSpeed, windAmp, _g: pg, _fullLen: pLen, _windReady: false});
+  });
+
+  /* center disk */
+  const rng   = d3.randomLcg(variable.charCodeAt(0)*37+17);
+  const seeds = d3.range(60).map(()=>({a:rng()*2*Math.PI, r:rng()*centerR*0.88, s:1.2+rng()*4.2, op:0.35+rng()*0.55}));
+  const diskColor = colorRamp[Math.floor(colorRamp.length/2)][1];
+  const dc2 = d3.color(diskColor);
+  const darkDisk = `rgb(${Math.floor(dc2.r*0.25)},${Math.floor(dc2.g*0.25)},${Math.floor(dc2.b*0.25)})`;
+  const midDisk  = `rgb(${Math.floor(dc2.r*0.5)},${Math.floor(dc2.g*0.5)},${Math.floor(dc2.b*0.5)})`;
+
+  svg.append("circle").attr("cx",cx).attr("cy",cy).attr("r",centerR)
+     .attr("fill",darkDisk).attr("stroke",midDisk).attr("stroke-width",2);
+  svg.selectAll(".seed-"+variable).data(seeds).enter().append("circle")
+     .attr("cx",d=>cx+d.r*Math.cos(d.a)).attr("cy",d=>cy+d.r*Math.sin(d.a))
+     .attr("r",d=>d.s/2).attr("fill",midDisk).attr("opacity",d=>d.op);
+  svg.append("circle").attr("cx",cx).attr("cy",cy).attr("r",centerR*0.36)
+     .attr("fill","#050502").attr("opacity",0.7);
+
+  return petalGroups;
+}
+
+/* ── Build garden ── */
+const garden = document.getElementById("garden");
+
+
+function easeInOutCubic(t) {
+  return t < 0.5
+    ? 4 * t * t * t
+    : 1 - Math.pow(-2 * t + 2, 3) / 2;
+}
+/* Each entry: { petalGroups, sizeConf, dataset, bloomed } */
+const allFlowerDefs = [];
+
+CLIMATE_DATA.forEach((ds,idx)=>{
+  const cell = document.createElement("div");
+  cell.className = "flower-cell";
+  cell.innerHTML = `
+  <div class="cell-header">
+    <div class="cell-title">${ds.name} <span class="cell-unit">${ds.unit}</span></div>
+  </div>
+    <div class="flower-wrap">
+      <svg id="svg-${ds.variable}" width="100%" height="100%" viewBox="0 0 700 700" style="overflow:visible"></svg>
+    </div>
+  `;
+  garden.appendChild(cell);
+  const svgEl = cell.querySelector(`#svg-${ds.variable}`);
+  const petalGroups = buildFlower(svgEl, ds, FLOWER_SIZES[idx]);
+
+  /* Hide all petals and labels initially */
+  petalGroups.forEach(pg => {
+    pg.path.attr("opacity", 0);
+    if(pg.lbl) pg.lbl.attr("opacity", 0);
+  });
+
+  allFlowerDefs.push({ petalGroups, bloomed: false, bloomStart: null });
+});
+
+/* ── Timing ── */
+const FLOWER_STAGGER = 1600;   /* ms between each flower starting to bloom */
+const PETAL_STAGGER  = 180;    /* ms between each petal within a flower */
+const PETAL_DURATION = 1000;   /* ms for one petal to reach full size */
+
+let t0 = null;
+
+(function tick(ts){
+  if(!t0) t0 = ts;
+  const elapsed = ts - t0;
+
+  allFlowerDefs.forEach((flower, fi) => {
+    const flowerDelay = fi * FLOWER_STAGGER;
+    if(elapsed < flowerDelay) return;
+
+    let flowerFullyBloomed = true;
+
+    flower.petalGroups.forEach((pg, pi) => {
+      if(pg._windReady) return; /* already in wind pool */
+
+      const petalDelay = flowerDelay + pi * PETAL_STAGGER;
+      const petalElapsed = elapsed - petalDelay;
+
+      if(petalElapsed <= 0){
+        flowerFullyBloomed = false;
+        return;
+      }
+
+      const progress = Math.min(petalElapsed / PETAL_DURATION, 1);
+      const eased    = easeInOutCubic(progress);
+
+      /* Scale the petal path from center by lerping pLen 0→full */
+      const fullLen = pg._fullLen;
+      const animLen = fullLen * eased;
+      pg.path
+        .attr("d", pg.buildPath(0, animLen))
+        .attr("opacity", Math.min(eased * 1.5, 0.92));
+
+      if(pg.lbl) pg.lbl.attr("opacity", Math.min((petalElapsed - PETAL_DURATION*0.6) / 200, 1));
+
+      if(progress >= 1){
+        pg._windReady = true;
+        allGroups.push(pg);
+      } else {
+        flowerFullyBloomed = false;
+      }
+    });
+  });
+
+  /* Wind on bloomed petals */
+  const el = (ts - t0) / 1000;
+  allGroups.forEach(pg => {
+    if(pg._g._hov) return;
+    const a = Math.sin(el*pg.windSpeed + pg.windPhase)*pg.windAmp
+            + Math.sin(el*pg.windSpeed*1.73 + pg.windPhase*1.31)*pg.windAmp*0.32;
+    pg.path.attr("d", pg.buildPath(a));
+  });
+
+  requestAnimationFrame(tick);
+})(0);
+</script>
+</body>
+</html>
